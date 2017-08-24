@@ -16,6 +16,97 @@ import random
 import scipy
 
 
+"""
+replicate `null`
+"""
+
+import numpy as np
+from numpy.linalg import svd
+
+
+def rank(A, atol=1e-13, rtol=0):
+    """Estimate the rank (i.e. the dimension of the nullspace) of a matrix.
+
+    The algorithm used by this function is based on the singular value
+    decomposition of `A`.
+
+    Parameters
+    ----------
+    A : ndarray
+        A should be at most 2-D.  A 1-D array with length n will be treated
+        as a 2-D with shape (1, n)
+    atol : float
+        The absolute tolerance for a zero singular value.  Singular values
+        smaller than `atol` are considered to be zero.
+    rtol : float
+        The relative tolerance.  Singular values less than rtol*smax are
+        considered to be zero, where smax is the largest singular value.
+
+    If both `atol` and `rtol` are positive, the combined tolerance is the
+    maximum of the two; that is::
+        tol = max(atol, rtol * smax)
+    Singular values smaller than `tol` are considered to be zero.
+
+    Return value
+    ------------
+    r : int
+        The estimated rank of the matrix.
+
+    See also
+    --------
+    numpy.linalg.matrix_rank
+        matrix_rank is basically the same as this function, but it does not
+        provide the option of the absolute tolerance.
+    """
+
+    A = np.atleast_2d(A)
+    s = svd(A, compute_uv=False)
+    tol = max(atol, rtol * s[0])
+    rank = int((s >= tol).sum())
+    return rank
+
+
+def nullspace(A, atol=1e-13, rtol=0):
+    """Compute an approximate basis for the nullspace of A.
+
+    The algorithm used by this function is based on the singular value
+    decomposition of `A`.
+
+    Parameters
+    ----------
+    A : ndarray
+        A should be at most 2-D.  A 1-D array with length k will be treated
+        as a 2-D with shape (1, k)
+    atol : float
+        The absolute tolerance for a zero singular value.  Singular values
+        smaller than `atol` are considered to be zero.
+    rtol : float
+        The relative tolerance.  Singular values less than rtol*smax are
+        considered to be zero, where smax is the largest singular value.
+
+    If both `atol` and `rtol` are positive, the combined tolerance is the
+    maximum of the two; that is::
+        tol = max(atol, rtol * smax)
+    Singular values smaller than `tol` are considered to be zero.
+
+    Return value
+    ------------
+    ns : ndarray
+        If `A` is an array with shape (m, k), then `ns` will be an array
+        with shape (k, n), where n is the estimated dimension of the
+        nullspace of `A`.  The columns of `ns` are a basis for the
+        nullspace; each element in numpy.dot(A, ns) will be approximately
+        zero.
+    """
+
+    A = np.atleast_2d(A)
+    u, s, vh = svd(A)
+    tol = max(atol, rtol * s[0])
+    nnz = (s >= tol).sum()
+    ns = vh[nnz:].conj().T
+    return scipy.linalg.orth(ns)
+
+
 def elem_sympoly(lambda_=None,k=None):
     # given a vector of lambdas and a maximum size k, determine the value of
     # the elementary symmetric polynomials:
@@ -85,6 +176,9 @@ def sample_dpp(L=None,k=None):
     Sample a set from a dpp. L is the (decomposed) kernel, and k is (optionally) 
     the size of the set to return 
     """    
+    if k == L['V'].shape[1]: 
+        # error handling
+        return list(range(k))
     if k is None:
         # choose eigenvectors randomly
         D = np.divide(L['D'], (1+L['D']))
@@ -95,7 +189,7 @@ def sample_dpp(L=None,k=None):
         v = sample_k(L['D'], k)
     
     k = len(v)    
-    V = L['V'][:, v]
+    V = L['V'][:, v]    
 
     # iterate
     y_index = list(range(L['V'].shape[1]))
@@ -123,8 +217,9 @@ def sample_dpp(L=None,k=None):
         
         # add the index into our sampler
         Y.append(y_index[choose_item])
+        if len(Y) == k:
+            return Y
         
-        yi = y_index[choose_item]
         # delete item from y_index...
         y_index.pop(choose_item)
 
@@ -132,22 +227,18 @@ def sample_dpp(L=None,k=None):
         j = random.choice(range(V.shape[1]))
         Vj = V[:, j]
         V = np.delete(V, j, axis=1)
-        # sample_dpp.m:30
-        # update V
-        V = V - np.multiply(Vj, V[yi,:] / Vj[yi])
-        # sample_dpp.m:33
+        
+        # make sure we do a projection onto Vj, 
+        # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4524741/
+        """
+        where Proj⊥Bi Bj is the the projection of Bj on the subspace perpendicular to Bi. 
+        For Bi ≠ 0 and Bj = 0 the projection is ∥Proj⊥Bi Bj∥2 = 0.
+        """
+        # is orthogonal basis
+        Vj_basis = nullspace(Vj)
+        # project onto basis
+        V = np.apply_along_axis(lambda x: np.dot(x, Vj_basis), 0, V)
         V = scipy.linalg.orth(V)
-        """
-        for a in arange(1,i - 1).reshape(-1):
-            for b in arange(1,a - 1).reshape(-1):
-                V[:,a]=V[:,a] - dot(dot(V[:,a].T,V[:,b]),V[:,b])
-            # sample_dpp.m:38
-            V[:,a]=V[:,a] / norm(V[:,a])
-            # sample_dpp.m:40
-        """
-    
-    # sample_dpp.m:45
-    return Y
 
 if __name__ == "__main__":
     # try to do a sample of stuff...
@@ -156,5 +247,5 @@ if __name__ == "__main__":
     iris = datasets.load_iris()
     M = rbf_kernel(iris.data.T)
     L = decompose_kernel(M)
-    indx = sample_dpp(L=L,k=2)
+    indx = sample_dpp(L=L, k=3)
     print(indx)
