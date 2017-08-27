@@ -170,7 +170,6 @@ def decompose_kernel(M):
     L['D'] = np.real(D.copy())
     return L
 
-
 def sample_dpp(L=None,k=None):
     """
     Sample a set from a dpp. L is the (decomposed) kernel, and k is (optionally) 
@@ -239,7 +238,7 @@ def sample_dpp(L=None,k=None):
         # project onto basis
         V = np.apply_along_axis(lambda x: np.dot(x, Vj_basis), 0, V)
         V = scipy.linalg.orth(V)
-
+    
 if __name__ == "__main__":
     # try to do a sample of stuff...
     from sklearn.metrics.pairwise import rbf_kernel
