@@ -238,7 +238,36 @@ def sample_dpp(L=None,k=None):
         # project onto basis
         V = np.apply_along_axis(lambda x: np.dot(x, Vj_basis), 0, V)
         V = scipy.linalg.orth(V)
+
+def sample_conditional_dpp(L, set_, k=None):
+    '''
+    Given a kernel matrix L, returns a sample from a k-DPP.
+    Based on code from [Javier Gonzalez](https://github.com/javiergonzalezh/dpp/blob/master/dpp/samplers/dpp.py~)
     
+    The code is hacked in a way that if a set A is provied, samples from a conditional 
+    dpp given A are produced.
+    
+    See `L-ensembles` section and Theorem 2.1 + Theorem 2.2 in [Determinantal point processes for machine learning](https://arxiv.org/pdf/1207.6083.pdf)
+    
+    L:     kernel matrix
+    set:   index of the conditional elements. Integer numpy array containing the locations 
+           (starting in zero) relative to the rows of L.
+    k:     size of the sample from the DPP
+    '''
+    # Calculate the kernel for the marginal
+    Id = np.array([1]*L.shape[0])
+    Id[set_] = 0
+    Id = np.diag(Id)    
+    L_compset_full = np.linalg.inv(Id + L)
+    L_minor = np.linalg.inv(np.delete(np.delete(L_compset_full,tuple(set_), axis=1),tuple(set_),axis=0))
+    L_compset = L_minor - np.diag([1]*L_minor.shape[0])
+    
+    # Compute the sample
+    sample = sample_dpp(L_compset, k)
+    if k==2: 
+        sample = [sample]
+    return np.concatenate((set_, sample) ,axis=0)
+
 if __name__ == "__main__":
     # try to do a sample of stuff...
     from sklearn.metrics.pairwise import rbf_kernel
