@@ -333,7 +333,7 @@ def sample_conditional_dpp(L, set_, k=None):
     L_compset = L_minor - np.diag([1]*L_minor.shape[0])
     
     # Compute the sample
-    sample = sample_dpp(L_compset, k)
+    sample = sample_dpp(decompose_kernel(L_compset), k)
     if k==2: 
         sample = [sample]
     return np.concatenate((set_, sample) ,axis=0)
