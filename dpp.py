@@ -170,7 +170,77 @@ def decompose_kernel(M):
     L['D'] = np.real(D.copy())
     return L
 
+
 def sample_dpp(L=None,k=None):
+    """
+    Sample a set from a dpp. L is the (decomposed) kernel, and k is (optionally) 
+    the size of the set to return 
+    """    
+    if k == L['V'].shape[1]: 
+        # error handling
+        return list(range(k))
+    if k is None:
+        # choose eigenvectors randomly
+        D = np.divide(L['D'], (1+L['D']))
+        # check this - might just do a random.sample along axis.
+        v = np.random.randint(0, L['V'].shape[1], random.choice(range(L['V'].shape[1])))
+        v = np.argwhere(np.random.uniform(size=(len(D), 1) <= D))
+    else:
+        v = sample_k(L['D'], k)
+    
+    k = len(v)    
+    V = L['V'][:, v]    
+
+    # iterate
+    y_index = list(range(L['V'].shape[1]))
+    Y=[]
+    
+    for _ in range(k):
+        # compute probabilities for each item
+        P=np.sum(np.power(V, 2), 1)
+        # sample_dpp.m:21
+        # sample_dpp.m:22
+        #find(rand <= cumsum(P),1)   
+        
+        """
+        This step differs from matlab code in the following way:
+            
+        1.  Create vector with valid indices which can be sampled
+        2.  Normalise the probabilities
+        3.  Make use of `np.random.choice` to choose (guarentees that it will be a new choice for `Y`)
+        """        
+        P_index = [(indx, prob) for indx, prob in list(zip(range(len(P)), P)) if indx not in Y]
+        P_list = [x for x, _ in P_index]
+        P_norm = np.array([p for _, p in P_index])
+        P_norm = P_norm/np.sum(P_norm)        
+        choose_item = np.random.choice(range(len(P_list)), 1, p=P_norm)[0]
+        
+        # add the index into our sampler
+        Y.append(y_index[choose_item])
+        if len(Y) == k:
+            return Y
+        
+        # delete item from y_index...
+        y_index.pop(choose_item)
+
+        # update...choose a vector to elinate, lets pick randomly
+        j = random.choice(range(V.shape[1]))
+        Vj = V[:, j]
+        V = np.delete(V, j, axis=1)
+        
+        # make sure we do a projection onto Vj, 
+        # is orthogonal basis
+        V_norm = V[choose_item, :]/Vj[choose_item]
+        V = V - (Vj.reshape(-1, 1).dot(V_norm.reshape(1, -1)))
+        
+        # orthogonalise
+        for a in range(len(Y)-1):
+            for b in range(a-1):
+                V[:, a] = V[:, a] - (V[:, a].T).dot(V[:, b]).dot(V[:, b])
+            V[:, a] = V[:, a]/np.linalg.norm(V[:, a])
+
+
+def sample_dpp1(L=None,k=None):
     """
     Sample a set from a dpp. L is the (decomposed) kernel, and k is (optionally) 
     the size of the set to return 
