@@ -234,9 +234,9 @@ def sample_dpp(L=None,k=None):
         V = V - (Vj.reshape(-1, 1).dot(V_norm.reshape(1, -1)))
         
         # orthogonalise
-        for a in range(len(Y)-1):
-            for b in range(a-1):
-                V[:, a] = V[:, a] - (V[:, a].T).dot(V[:, b]).dot(V[:, b])
+        for a in range(V.shape[1]):
+            for b in range(a):
+                V[:, a] = V[:, a] - ((V[:, a].T).dot(V[:, b]))*(V[:, b])
             V[:, a] = V[:, a]/np.linalg.norm(V[:, a])
 
 
