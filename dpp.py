@@ -170,7 +170,6 @@ def decompose_kernel(M):
     L['D'] = np.real(D.copy())
     return L
 
-
 def sample_dpp(L=None,k=None):
     """
     Sample a set from a dpp. L is the (decomposed) kernel, and k is (optionally) 
@@ -213,6 +212,90 @@ def sample_dpp(L=None,k=None):
         P_list = [x for x, _ in P_index]
         P_norm = np.array([p for _, p in P_index])
         P_norm = P_norm/np.sum(P_norm)
+        choose_item = np.random.choice(range(len(P_list)), 1, p=P_norm)[0]
+        
+        # add the index into our sampler
+        Y.append(y_index[choose_item])
+        if len(Y) == k:
+            return Y
+        
+        # delete item from y_index...
+        y_index.pop(choose_item)
+
+        # update...choose a vector to elinate, lets pick randomly
+        j = random.choice(range(V.shape[1]))
+        Vj = V[:, j]
+        V = np.delete(V, j, axis=1)
+        
+        # make sure we do a projection onto Vj, 
+        # is orthogonal basis
+        V_norm = V[choose_item, :]/Vj[choose_item]
+        V = V - (Vj.reshape(-1, 1).dot(V_norm.reshape(1, -1))) + (np.ones(V.shape) * np.finfo(float).eps)
+        
+        # orthogonalise
+        for a in range(V.shape[1]):
+            for b in range(a):
+                V[:, a] = V[:, a] - ((V[:, a].T).dot(V[:, b]))*(V[:, b])
+            V[:, a] = V[:, a]/np.linalg.norm(V[:, a])
+
+
+def sample_dpp2(L=None, k=None, chosen_set=None):
+    """
+    Sample a set from a dpp. L is the (decomposed) kernel, and k is (optionally) 
+    the size of the set to return 
+    
+    chosen_set will be the indices which k is _forced_ to sample from.
+    """
+    if chosen_set is None or k > len(chosen_set):
+        print("Chosen set is either too small or not provided...using default `sample_dpp`")
+        return sample_dpp(L, k)
+    if k == L['V'].shape[1]: 
+        # error handling
+        return list(range(k))
+    if k is None:
+        # choose eigenvectors randomly
+        D = np.divide(L['D'], (1+L['D']))
+        # check this - might just do a random.sample along axis.
+        v = np.random.randint(0, L['V'].shape[1], random.choice(range(L['V'].shape[1])))
+        v = np.argwhere(np.random.uniform(size=(len(D), 1) <= D))
+    else:
+        v = sample_k(L['D'], k)
+    
+    k = len(v)    
+    V = L['V'][:, v]    
+
+    # iterate
+    y_index = list(range(L['V'].shape[1]))
+    Y=[]
+    
+    for _ in range(k):
+        # compute probabilities for each item
+        P=np.sum(np.power(V, 2), 1)
+        # sample_dpp.m:21
+        # sample_dpp.m:22
+        #find(rand <= cumsum(P),1)   
+        
+        """
+        This step differs from matlab code in the following way:
+            
+        1.  Create vector with valid indices which can be sampled
+        2.  Normalise the probabilities
+        3.  Make use of `np.random.choice` to choose (guarentees that it will be a new choice for `Y`)
+        """
+        # for all items in chosen set, their probability is moved to 0
+        P_index = [(indx, prob) if indx not in chosen_set else (indx, 0.0)
+                   for indx, prob in list(zip(range(len(P)), P)) if indx not in Y]        
+        P_list = [x for x, _ in P_index]
+        P_norm = np.array([p for _, p in P_index])
+        
+        if np.sum(P_norm) > 0:
+            P_norm = P_norm/np.sum(P_norm)
+        else:
+            P_index = [(indx, prob) 
+                       for indx, prob in list(zip(range(len(P)), P)) if indx not in Y]        
+            P_list = [x for x, _ in P_index]
+            P_norm = np.array([p for _, p in P_index])
+            P_norm = P_norm/np.sum(P_norm)
         choose_item = np.random.choice(range(len(P_list)), 1, p=P_norm)[0]
         
         # add the index into our sampler
@@ -334,6 +417,35 @@ def sample_conditional_dpp(L, set_, k=None):
     
     # Compute the sample
     sample = sample_dpp(decompose_kernel(L_compset), k)
+    if k==2: 
+        sample = [sample]
+    return np.concatenate((set_, sample) ,axis=0)
+
+def sample_conditional_dpp2(L, set_, k=None, chosen_set=None):
+    '''
+    Given a kernel matrix L, returns a sample from a k-DPP.
+    Based on code from [Javier Gonzalez](https://github.com/javiergonzalezh/dpp/blob/master/dpp/samplers/dpp.py~)
+    
+    The code is hacked in a way that if a set A is provied, samples from a conditional 
+    dpp given A are produced.
+    
+    See `L-ensembles` section and Theorem 2.1 + Theorem 2.2 in [Determinantal point processes for machine learning](https://arxiv.org/pdf/1207.6083.pdf)
+    
+    L:     kernel matrix
+    set:   index of the conditional elements. Integer numpy array containing the locations 
+           (starting in zero) relative to the rows of L.
+    k:     size of the sample from the DPP
+    '''
+    # Calculate the kernel for the marginal
+    Id = np.array([1]*L.shape[0])
+    Id[set_] = 0
+    Id = np.diag(Id)    
+    L_compset_full = np.linalg.inv(Id + L)
+    L_minor = np.linalg.inv(np.delete(np.delete(L_compset_full,tuple(set_), axis=1),tuple(set_),axis=0))
+    L_compset = L_minor - np.diag([1]*L_minor.shape[0])
+    
+    # Compute the sample
+    sample = sample_dpp2(decompose_kernel(L_compset), k, chosen_set)
     if k==2: 
         sample = [sample]
     return np.concatenate((set_, sample) ,axis=0)
