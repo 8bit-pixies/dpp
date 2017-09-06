@@ -212,7 +212,7 @@ def sample_dpp(L=None,k=None):
         P_index = [(indx, prob) for indx, prob in list(zip(range(len(P)), P)) if indx not in Y]
         P_list = [x for x, _ in P_index]
         P_norm = np.array([p for _, p in P_index])
-        P_norm = P_norm/np.sum(P_norm)        
+        P_norm = P_norm/np.sum(P_norm)
         choose_item = np.random.choice(range(len(P_list)), 1, p=P_norm)[0]
         
         # add the index into our sampler
@@ -231,7 +231,7 @@ def sample_dpp(L=None,k=None):
         # make sure we do a projection onto Vj, 
         # is orthogonal basis
         V_norm = V[choose_item, :]/Vj[choose_item]
-        V = V - (Vj.reshape(-1, 1).dot(V_norm.reshape(1, -1)))
+        V = V - (Vj.reshape(-1, 1).dot(V_norm.reshape(1, -1))) + (np.ones(V.shape) * np.finfo(float).eps)
         
         # orthogonalise
         for a in range(V.shape[1]):
